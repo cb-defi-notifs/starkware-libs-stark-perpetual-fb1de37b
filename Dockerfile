@@ -1,16 +1,27 @@
-FROM ubuntu:18.04
+FROM ciimage/python:3.9-ci as base_image
 
-RUN apt update
-RUN apt install -y cmake python3.7 libgmp3-dev g++ python3-pip python3.7-dev npm
+# Installing cmake via apt doesn't bring the most up-to-date version.
+RUN pip install cmake==3.22
+RUN curl -sL https://starkware-third-party.s3.us-east-2.amazonaws.com/build_tools/node-v18.17.0-linux-x64.tar.xz -o node-v18.17.0-linux-x64.tar.xz && \
+    tar -xf node-v18.17.0-linux-x64.tar.xz -C /opt/ && \
+    rm -f node-v18.17.0-linux-x64.tar.xz
 
+ENV PATH="${PATH}:/opt/node-v18.17.0-linux-x64/bin"
 COPY . /app/
+WORKDIR /app/
+RUN ./docker_common_deps.sh
 
 # Build.
-WORKDIR /app/
-RUN ./build.sh
+RUN bazel build //...
+
+FROM base_image
 
 # Run tests.
-WORKDIR /app/build/Release
-RUN ctest -V
+RUN bazel test //...
+
+WORKDIR /app/src/services/perpetual/public/js/
+RUN npm install -g yarn
+RUN yarn install
+RUN yarn test
 
 WORKDIR /app/
